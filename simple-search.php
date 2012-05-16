@@ -28,6 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * @license http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  */
 
+if ( ! class_exists( 'FS_Simple_Search' ) ) {
+
 FS_Simple_Search::init();
 
 class FS_Simple_Search {
@@ -889,5 +891,7 @@ class FS_Simple_Search {
 
 		$wp_post_types['page']->publicly_queryable = true;
 	}
+
+}
 
 }
