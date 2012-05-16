@@ -32,12 +32,14 @@ FS_Simple_Search::init();
 
 class FS_Simple_Search {
 
-	static $text_domain = 'Simple_Search';
+	static $text_domain;
 
 	/**
 	 * Hook into WordPress where appropriate.
 	 */
 	public static function init() {
+
+		self::$text_domain = apply_filters( 'simple_search_text_domain', 'Simple_Search' );
 
 		add_filter( 'search_link', __CLASS__ . '::search_link', 10, 2 );
 
@@ -133,7 +135,7 @@ class FS_Simple_Search {
 	// Output the suggestion using add_query_arg for search link instead of get_search_link to have filter parameters persist
 	?>
 	<div class="dym">
-		<?php _e( 'Did you mean: ', hybrid_get_textdomain() ); ?><a href="<?php echo add_query_arg( array( 's' => $did_you_mean ) ) ?>"><?php echo $did_you_mean; ?></a>?
+		<?php _e( 'Did you mean: ', self::$text_domain ); ?><a href="<?php echo add_query_arg( array( 's' => $did_you_mean ) ) ?>"><?php echo $did_you_mean; ?></a>?
 	</div>
 	<?php
 
@@ -157,7 +159,7 @@ class FS_Simple_Search {
 	?>
 
 	<div class="search-results-count">
-		<?php printf( __( 'Showing %s-%s of %s results', hybrid_get_textdomain() ), $previous_results, $previous_results + $wp_query->post_count - 1, $wp_query->found_posts ); ?>
+		<?php printf( __( 'Showing %s-%s of %s results', self::$text_domain ), $previous_results, $previous_results + $wp_query->post_count - 1, $wp_query->found_posts ); ?>
 	</div>
 
 	<?php
@@ -673,7 +675,7 @@ class FS_Simple_Search {
 
 		if( ! is_admin() && isset( $_GET['s'] ) ) {
 
-			if( empty( $_GET['s'] ) || $_GET['s'] == ' ' || $_GET['s'] == esc_attr( 'Search this site...', hybrid_get_textdomain() ) )
+			if( empty( $_GET['s'] ) || $_GET['s'] == ' ' || $_GET['s'] == esc_attr( 'Search this site...', self::$text_domain ) )
 				$_GET['s'] = '~';
 
 			$search_link = get_search_link( trim( $_GET['s'] ) ); // It's too early for wp_query to be used, so force use of $_GET['s']
@@ -867,8 +869,8 @@ class FS_Simple_Search {
 	 */
 	public static function seach_all_title( $doctitle ) {
 
-		if( is_search() && $doctitle == __( 'Search results for &quot;~&quot;', hybrid_get_textdomain() ) )
-			$doctitle = __( 'Showing all search results', hybrid_get_textdomain() );
+		if( is_search() && $doctitle == __( 'Search results for &quot;~&quot;', self::$text_domain ) )
+			$doctitle = __( 'Showing all search results', self::$text_domain );
 
 		return $doctitle;
 	}
