@@ -882,8 +882,7 @@ class FS_Simple_Search {
 	 * Returns Post Title - customised based on post type
 	 * 
 	 * @author Jason Conroy <jason@findingsimple.com>
-	 * @package eeo
-	 * @subpackage Search
+	 * @package Simple Search
 	 * @since 1.0
 	 */
 	function search_title() {
