@@ -30,7 +30,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 if ( ! class_exists( 'FS_Simple_Search' ) ) {
 
-FS_Simple_Search::init();
+/**
+ * So that themes and other plugins can customise the text domain, the FS_Simple_Glossary
+ * should not be initialized until after the plugins_loaded and after_setup_theme hooks.
+ * However, it also needs to run early on the init hook.
+ *
+ * @author Brent Shepherd <brent@findingsimple.com>
+ * @package Simple Search
+ * @since 1.0
+ */
+function fs_initialize_search(){
+	FS_Simple_Search::init();
+}
+add_action( 'init', 'fs_initialize_search', -1 );
 
 class FS_Simple_Search {
 
@@ -38,6 +50,10 @@ class FS_Simple_Search {
 
 	/**
 	 * Hook into WordPress where appropriate.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
 	 */
 	public static function init() {
 
