@@ -31,7 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 if ( ! class_exists( 'FS_Simple_Search' ) ) {
 
 /**
- * So that themes and other plugins can customise the text domain, the FS_Simple_Glossary
+ * So that themes and other plugins can customise the text domain, the FS_Simple_Search
  * should not be initialized until after the plugins_loaded and after_setup_theme hooks.
  * However, it also needs to run early on the init hook.
  *
