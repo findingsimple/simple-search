@@ -28,7 +28,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * @license http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  */
 
-if ( ! class_exists( 'FS_Simple_Search' ) ) {
+if ( ! class_exists( 'FS_Simple_Search' ) ) :
 
 /**
  * So that themes and other plugins can customise the text domain, the FS_Simple_Search
@@ -79,6 +79,11 @@ class FS_Simple_Search {
 
 		add_action( 'init', __CLASS__ . '::make_pages_queryable', 20 );
 
+		add_action( 'save_post', __CLASS__ . '::schedule_relevance_index_building', 10, 2 );
+
+		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::build_post_relevance_index' );
+
+		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::reschedule_relevance_index' );
 	}
 
 	/**
@@ -262,6 +267,11 @@ class FS_Simple_Search {
 		if( isset( $post->relevance ) ) // Already calculated relevance for this post 
 			return $post->relevance;
 
+		$relevance = get_post_meta( $post->ID, self::search_query_metakey( $search_query ), true );
+
+		if ( ! empty( $relevance ) )
+			return $relevance;
+
 		$relevance = 1;
 
 		// Ignore all punctuation & invisibles in search terms & post items
@@ -347,7 +357,14 @@ class FS_Simple_Search {
 
 			foreach( $search_query_tokens as $search_token ) {
 
-				// Ignore all search terms with < 3 letters
+				$search_token_relevance = get_post_meta( $post->ID, self::search_query_metakey( $search_token ), true );
+
+				if ( ! empty( $search_token_relevance ) ) {
+					$relevance += $search_token_relevance;
+					continue;
+				}
+
+				// Ignore all search terms with < 3 letters or stop words
 				if( strlen( $search_token ) < 3 || in_array( $search_token, self::get_stop_words() ) )
 					continue;
 
@@ -768,6 +785,25 @@ class FS_Simple_Search {
 
 
 	/**
+	 * Removes shortcodes, HTML, PHP and punctuation from a string.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function strip_string_bare( $string ) {
+
+		$string = strip_shortcodes( $string );
+
+		$string = strip_tags( $string );
+
+		$string = self::remove_punctuation( $string );
+
+		$string = self::strip_invisibles( $string );
+
+		return $string;
+	}
+	/**
 	 * Removes punctuation characters from a string. 
 	 * 
 	 * Based on the Relevanssi relevanssi_remove_punctuation function. 
@@ -845,35 +881,35 @@ class FS_Simple_Search {
 	 */
 	public static function get_stop_words() {
 		return array(
-		"a", "about", "above", "above", "across", "after", "afterwards", "again", "against", "all", "almost",
-		"alone", "along", "already", "also", "although", "always", "am", "among", "amongst", "amoungst", "amount",
-		"an", "and", "another", "any", "anyhow", "anyone", "anything", "anyway", "anywhere", "are", "around",
-		"as",  "at", "back", "be", "became", "because", "become", "becomes", "becoming", "been", "before",
-		"beforehand", "behind", "being", "below", "beside", "besides", "between", "beyond", "bill", "both", "bottom",
-		"but", "by", "call", "can", "cannot", "cant", "co", "con", "could", "couldnt", "cry",
-		"de", "describe", "detail", "do", "done", "down", "due", "during", "each", "eg", "eight",
-		"either", "eleven", "else", "elsewhere", "empty", "enough", "etc", "even", "ever", "every", "everyone",
-		"everything", "everywhere", "except", "few", "fifteen", "fify", "fill", "find", "fire", "first", "five",
-		"for", "former", "formerly", "forty", "found", "four", "from", "front", "full", "further", "get",
-		"give", "go", "had", "has", "hasnt", "have", "he", "hence", "her", "here", "hereafter",
-		"hereby", "herein", "hereupon", "hers", "herself", "him", "himself", "his", "how", "however", "hundred",
-		"ie", "if", "in", "inc", "indeed", "interest", "into", "is", "it", "its", "itself",
-		"keep", "last", "latter", "latterly", "least", "less", "ltd", "made", "many", "may", "me",
-		"meanwhile", "might", "mill", "mine", "more", "moreover", "most", "mostly", "move", "much", "must",
-		"my", "myself", "name", "namely", "neither", "never", "nevertheless", "next", "nine", "no", "nobody",
-		"none", "noone", "nor", "not", "nothing", "now", "nowhere", "of", "off", "often", "on",
-		"once", "one", "only", "onto", "or", "other", "others", "otherwise", "our", "ours", "ourselves",
-		"out", "over", "own", "part", "per", "perhaps", "please", "put", "rather", "re", "same",
-		"see", "seem", "seemed", "seeming", "seems", "serious", "several", "she", "should", "show", "side",
-		"since", "sincere", "six", "sixty", "so", "some", "somehow", "someone", "something", "sometime", "sometimes",
-		"somewhere", "still", "such", "system", "take", "ten", "than", "that", "the", "their", "them",
-		"themselves", "then", "thence", "there", "thereafter", "thereby", "therefore", "therein", "thereupon", "these", "they",
-		"thickv", "thin", "third", "this", "those", "though", "three", "through", "throughout", "thru", "thus",
-		"to", "together", "too", "top", "toward", "towards", "twelve", "twenty", "two", "un", "under",
-		"until", "up", "upon", "us", "very", "via", "was", "we", "well", "were", "what",
-		"whatever", "when", "whence", "whenever", "where", "whereafter", "whereas", "whereby", "wherein", "whereupon", "wherever",
-		"whether", "which", "while", "whither", "who", "whoever", "whole", "whom", "whose", "why", "will",
-		"with", "within", "without", "would", "yet", "you", "your", "yours", "yourself", "yourselves", "the"
+			'a', 'about', 'above', 'above', 'across', 'after', 'afterwards', 'again', 'against', 'all', 'almost',
+			'alone', 'along', 'already', 'also', 'although', 'always', 'am', 'among', 'amongst', 'amoungst', 'amount',
+			'an', 'and', 'another', 'any', 'anyhow', 'anyone', 'anything', 'anyway', 'anywhere', 'are', 'around',
+			'as',  'at', 'back', 'be', 'became', 'because', 'become', 'becomes', 'becoming', 'been', 'before',
+			'beforehand', 'behind', 'being', 'below', 'beside', 'besides', 'between', 'beyond', 'bill', 'both', 'bottom',
+			'but', 'by', 'call', 'can', 'cannot', 'cant', 'co', 'con', 'could', 'couldnt', 'cry',
+			'de', 'describe', 'detail', 'do', 'done', 'down', 'due', 'during', 'each', 'eg', 'eight',
+			'either', 'eleven', 'else', 'elsewhere', 'empty', 'enough', 'etc', 'even', 'ever', 'every', 'everyone',
+			'everything', 'everywhere', 'except', 'few', 'fifteen', 'fify', 'fill', 'find', 'fire', 'first', 'five',
+			'for', 'former', 'formerly', 'forty', 'found', 'four', 'from', 'front', 'full', 'further', 'get',
+			'give', 'go', 'had', 'has', 'hasnt', 'have', 'he', 'hence', 'her', 'here', 'hereafter',
+			'hereby', 'herein', 'hereupon', 'hers', 'herself', 'him', 'himself', 'his', 'how', 'however', 'hundred',
+			'ie', 'if', 'in', 'inc', 'indeed', 'interest', 'into', 'is', 'it', 'its', 'itself',
+			'keep', 'last', 'latter', 'latterly', 'least', 'less', 'ltd', 'made', 'many', 'may', 'me',
+			'meanwhile', 'might', 'mill', 'mine', 'more', 'moreover', 'most', 'mostly', 'move', 'much', 'must',
+			'my', 'myself', 'name', 'namely', 'neither', 'never', 'nevertheless', 'next', 'nine', 'no', 'nobody',
+			'none', 'noone', 'nor', 'not', 'nothing', 'now', 'nowhere', 'of', 'off', 'often', 'on',
+			'once', 'one', 'only', 'onto', 'or', 'other', 'others', 'otherwise', 'our', 'ours', 'ourselves',
+			'out', 'over', 'own', 'part', 'per', 'perhaps', 'please', 'put', 'rather', 're', 'same',
+			'see', 'seem', 'seemed', 'seeming', 'seems', 'serious', 'several', 'she', 'should', 'show', 'side',
+			'since', 'sincere', 'six', 'sixty', 'so', 'some', 'somehow', 'someone', 'something', 'sometime', 'sometimes',
+			'somewhere', 'still', 'such', 'system', 'take', 'ten', 'than', 'that', 'the', 'their', 'them',
+			'themselves', 'then', 'thence', 'there', 'thereafter', 'thereby', 'therefore', 'therein', 'thereupon', 'these', 'they',
+			'thickv', 'thin', 'third', 'this', 'those', 'though', 'three', 'through', 'throughout', 'thru', 'thus',
+			'to', 'together', 'too', 'top', 'toward', 'towards', 'twelve', 'twenty', 'two', 'un', 'under',
+			'until', 'up', 'upon', 'us', 'very', 'via', 'was', 'we', 'well', 'were', 'what',
+			'whatever', 'when', 'whence', 'whenever', 'where', 'whereafter', 'whereas', 'whereby', 'wherein', 'whereupon', 'wherever',
+			'whether', 'which', 'while', 'whither', 'who', 'whoever', 'whole', 'whom', 'whose', 'why', 'will',
+			'with', 'within', 'without', 'would', 'yet', 'you', 'your', 'yours', 'yourself', 'yourselves', 'the'
 		);
 	}
 
@@ -895,8 +931,7 @@ class FS_Simple_Search {
 
 
 	/**
-	 * Sets the 'publicly_queryable' value of the page post type to true 
-	 * so that search results can be filtered by page. 
+	 * Sets the 'publicly_queryable' value of the page post type to true so that search results can be filtered by page. 
 	 * 
 	 * @author Brent Shepherd <brent@findingsimple.com>
 	 * @package Simple Search
@@ -908,6 +943,140 @@ class FS_Simple_Search {
 		$wp_post_types['page']->publicly_queryable = true;
 	}
 
-}
+
+	/**
+	 * When a post is saved, schedule a hook to index the posts relevance. This is not done when a post is updated
+	 * to speed up post saving and also to save resources by not firing multiple times per minute if only small changes
+	 * are being made.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function schedule_relevance_index_building( $post_id, $post ) {
+
+		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) || $post->post_status == 'auto-draft' || wp_is_post_revision( $post ) )
+			return;
+
+		/* Re-index post relevance in two minutes (so it's up-to-date) and then again in a day and week (to account for impact of recenecy on relevance) */
+		wp_clear_scheduled_hook( 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
+		wp_schedule_single_event( time() + 60 * 2, 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
+		//self::build_post_relevance_index( $post_id );
+	}
+
+
+	/**
+	 * Cache scheduler
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function reschedule_relevance_index( $post_id ) {
+
+		wp_clear_scheduled_hook( 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
+
+		$transient_key = 'fss_completed_relevance_indexes_' . $post_id;
+
+		$completed_indexes = get_transient( $transient_key );
+		delete_transient( $transient_key );
+
+		if ( empty( $completed_indexes ) )
+			$completed_indexes = 1;
+
+		switch ( $completed_indexes ) {
+			case 1 : // Reschedule for an hour
+				$time = time() + 60 * 60;
+				break;
+			case 2 : // Reschedule for a day
+				$time = time() + 60 * 60 * 24;
+				break;
+			case 3 : // Reschedule for a week
+				$time = time() + 60 * 60 * 24 * 7;
+				break;
+			case 4 : // Reschedule for a fortnight
+				$time = time() + 60 * 60 * 24 * 7 * 2;
+				break;
+			default : // Don't reschedule
+				$time = false;
+				break;
+		}
+
+		if ( $time !== false ) {
+			wp_schedule_single_event( $time, 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
+			set_transient( $transient_key, $completed_indexes + 1, $time + 60 * 60 * 24 );
+		}
+
+	}
+
+
+	/**
+	 * When a post is saved, calculate and store its relevance for the most common terms and phrases in the post.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function build_post_relevance_index( $post_id ) {
+
+		$post = get_post( $post_id );
+
+		$content = strtolower( self::strip_string_bare( $post->post_content ) );
+
+		/* Individual Term */
+
+		$words = str_word_count( $content, 1 );
+
+		$words_and_counts = array_count_values( array_diff( $words, self::get_stop_words() ) );
+
+		/* Only cache for words with a frequency > 2 */
+		$words_and_counts = array_filter( $words_and_counts, create_function( '$a', 'return $a >= 2;' ) );
+
+		/* 2-9 word search terms with frequency > 2 */
+		for( $phrase_length = 2; $phrase_length < 10; $phrase_length++ ) {
+
+			foreach ( $words as $index => $word )
+				if ( isset( $words[$index + $phrase_length] ) )
+					$phrases[] = implode( ' ', array_slice( $words, $index, $phrase_length ) );
+
+			$phrases_and_counts = array_count_values( $phrases );
+
+			arsort( $phrases_and_counts );
+
+			$phrases_and_counts = array_filter( $phrases_and_counts, create_function( '$a', 'return $a >= 2;' ) );
+		}
+
+		foreach( array_merge( $words_and_counts, $phrases_and_counts ) as $search_query => $frequency ) {
+			unset( $post->relevance );
+			$relevance = self::calculate_relevance_for_post( $post, $search_query );
+			update_post_meta( $post_id, self::search_query_metakey( $search_query ), $relevance );
+		}
+
+	}
+
+	/**
+	 * Returns a DB safe key from a given search query by replaces spaces with _.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function search_query_metakey( $search_query ) {
+
+		$search_query_metakey = self::strip_string_bare( $search_query );
+		$search_query_metakey = str_replace( ' ', '_', preg_replace( '/\s{2,}/', ' ', $search_query_metakey ) );
+
+		return '_fss_relevance_' . $search_query_metakey;
+	}
 
 }
+
+function tester(){
+
+	foreach( array( 'string      with    space ', 'strin1234 zxv$*%0   <a href="http://asdf">test</a>  asdf' ) as $search_query )
+		FS_Simple_Search::search_query_metakey( $search_query );
+
+}
+//add_action('init', 'tester');
+
+endif;
