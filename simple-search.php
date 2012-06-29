@@ -48,6 +48,14 @@ class FS_Simple_Search {
 
 	static $text_domain;
 
+	/* DB option/meta prefixes */
+
+	static $tally_prefix        = '_fss_search_tally_';
+
+	static $relevance_prefix    = '_fss_relevance_';
+
+	static $did_you_mean_prefix = '_fss_did_you_mean_';
+
 	/**
 	 * Hook into WordPress where appropriate.
 	 * 
@@ -84,6 +92,12 @@ class FS_Simple_Search {
 		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::build_post_relevance_index' );
 
 		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::reschedule_relevance_index' );
+
+		add_action( 'shutdown', __CLASS__ . '::search_query_tally' );
+
+		add_action( 'fss_clean_search_cache', __CLASS__ . '::clean_search_cache' );
+
+		add_filter( 'cron_schedules', __CLASS__ . '::add_custom_cron_schedules' );
 	}
 
 	/**
@@ -125,40 +139,47 @@ class FS_Simple_Search {
 
 		$search_query = self::remove_punctuation( $search_query );
 
-		$search_query_tokens = explode( " ", $search_query) ;
+		$did_you_mean = get_option( self::get_search_query_key( $search_query, self::$did_you_mean_prefix ), array() );
 
-		$lang = 'en';
+		// Only calculate did_you_mean if none already cached
+		if ( empty( $did_you_mean ) ) {
 
-		$config = array( 'general.engine' => 'GoogleSpell' );
+			$search_query_tokens = explode( " ", $search_query) ;
 
-		require_once( ABSPATH . WPINC . "/js/tinymce/plugins/spellchecker/classes/SpellChecker.php" );
-		require_once( ABSPATH . WPINC . "/js/tinymce/plugins/spellchecker/classes/GoogleSpell.php" );
+			$lang = 'en';
 
-		// Create an instance of the spell checker (same was as TinyMCE does it)
-		$spellchecker = new $config['general.engine']($config);
-		$misspellings = $spellchecker->checkWords( $lang, $search_query_tokens ); //$result = call_user_func_array(array($spellchecker, $input['method']), $input['params']);
+			$config = array( 'general.engine' => 'GoogleSpell' );
 
-		if( empty( $misspellings ) )
-			return;
+			require_once( ABSPATH . WPINC . "/js/tinymce/plugins/spellchecker/classes/SpellChecker.php" );
+			require_once( ABSPATH . WPINC . "/js/tinymce/plugins/spellchecker/classes/GoogleSpell.php" );
 
-		// Get the spelling suggestions for each mispelled word
-		foreach( $misspellings as $misspelling ) {
-			$all_suggestions		   = $spellchecker->getSuggestions( $lang, $misspelling );
-			$suggestions[$misspelling] = $all_suggestions[0];
+			// Create an instance of the spell checker (same was as TinyMCE does it)
+			$spellchecker = new $config['general.engine']($config);
+			$misspellings = $spellchecker->checkWords( $lang, $search_query_tokens ); //$result = call_user_func_array(array($spellchecker, $input['method']), $input['params']);
+
+			if( empty( $misspellings ) )
+				return;
+
+			// Get the spelling suggestions for each mispelled word
+			foreach( $misspellings as $misspelling ) {
+				$all_suggestions		   = $spellchecker->getSuggestions( $lang, $misspelling );
+				$suggestions[$misspelling] = $all_suggestions[0];
+			}
+
+			// Create an string with each word & recommended word
+			foreach( $search_query_tokens as $search_term )
+					$did_you_mean[] = ( isset( $suggestions[$search_term] ) ) ? $suggestions[$search_term] : $search_term;
+
+			$did_you_mean = implode( ' ', $did_you_mean );
+
+			update_option( self::get_search_query_key( $search_query, self::$did_you_mean_prefix ), $did_you_mean );
+
 		}
-
-		$did_you_mean = array();
-
-		// Create an string with each word & recommended word
-		foreach( $search_query_tokens as $search_term )
-				$did_you_mean[] = ( isset( $suggestions[$search_term] ) ) ? $suggestions[$search_term] : $search_term;
-
-		$did_you_mean = implode( ' ', $did_you_mean );
 
 	// Output the suggestion using add_query_arg for search link instead of get_search_link to have filter parameters persist
 	?>
 	<div class="dym">
-		<?php _e( 'Did you mean: ', self::$text_domain ); ?><a href="<?php echo add_query_arg( array( 's' => $did_you_mean ) ) ?>"><?php echo $did_you_mean; ?></a>?
+		<?php _e( 'Did you mean: ', self::$text_domain ); ?><a href="<?php echo add_query_arg( array( 's' => urlencode( $did_you_mean ) ) ) ?>"><?php echo $did_you_mean; ?></a>?
 	</div>
 	<?php
 
@@ -216,6 +237,36 @@ class FS_Simple_Search {
 
 
 	/**
+	 * Keep a tally of the number of times this query has been searched for. 
+	 * 
+	 * Hooked to shutdown so that it only fires once.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function search_query_tally() {
+
+		if( ! is_search() )
+			return;
+
+		$search_query = get_search_query( false );
+
+		// Only count when there is actually a search query, and count once (for front page)
+		if( empty( $search_query ) || $search_query == '~' || is_paged() )
+			return;
+
+		$search_tally = get_option( self::get_search_query_key( $search_query, self::$tally_prefix ), 0 );
+
+		update_option( self::get_search_query_key( $search_query, self::$tally_prefix ), $search_tally + 1 );
+
+		// Make sure the search cache is being cleaned once per month
+		if ( ! wp_next_scheduled( 'fss_clean_search_cache' ) )
+			wp_schedule_event( current_time( 'timestamp' ), 'monthly', 'fss_clean_search_cache' );
+	}
+
+
+	/**
 	 * Sorting function that compares the relevance of two posts for a given search query.
 	 * 
 	 * @uses self::calculate_relevance_for_post to determine the posts relevance. 
@@ -267,7 +318,7 @@ class FS_Simple_Search {
 		if( isset( $post->relevance ) ) // Already calculated relevance for this post 
 			return $post->relevance;
 
-		$relevance = get_post_meta( $post->ID, self::search_query_metakey( $search_query ), true );
+		$relevance = get_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), true );
 
 		if ( ! empty( $relevance ) )
 			return $relevance;
@@ -357,7 +408,7 @@ class FS_Simple_Search {
 
 			foreach( $search_query_tokens as $search_token ) {
 
-				$search_token_relevance = get_post_meta( $post->ID, self::search_query_metakey( $search_token ), true );
+				$search_token_relevance = get_post_meta( $post->ID, self::get_search_query_key( $search_token, self::$relevance_prefix ), true );
 
 				if ( ! empty( $search_token_relevance ) ) {
 					$relevance += $search_token_relevance;
@@ -424,6 +475,9 @@ class FS_Simple_Search {
 			$relevance += ( $comment_count > 100 ) ? $low_importance : $low_importance * $comment_count / 100;
 
 		$post->relevance = $relevance;
+
+		// Store the relevance of this post against the search query
+		update_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
 
 		return $relevance;
 	}
@@ -803,6 +857,8 @@ class FS_Simple_Search {
 
 		return $string;
 	}
+
+
 	/**
 	 * Removes punctuation characters from a string. 
 	 * 
@@ -1049,10 +1105,41 @@ class FS_Simple_Search {
 		foreach( array_merge( $words_and_counts, $phrases_and_counts ) as $search_query => $frequency ) {
 			unset( $post->relevance );
 			$relevance = self::calculate_relevance_for_post( $post, $search_query );
-			update_post_meta( $post_id, self::search_query_metakey( $search_query ), $relevance );
+			update_post_meta( $post_id, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
+		}
+	}
+
+
+	/**
+	 * Scheduled to run once a month to clean search cache.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function clean_search_cache() {
+		global $wpdb;
+
+		// Get all search queries with tally < 1
+		$option_names_to_delete = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s AND option_value < 4", self::$tally_prefix . '%' ) );
+
+		if ( empty( $option_names_to_delete ) )
+			return;
+
+		$relevance_keys_to_delete = array();
+
+		foreach( $option_names_to_delete as $option_name ) {
+			$search_query = str_replace( self::$tally_prefix, '', $option_name );
+			$relevance_keys_to_delete[] = self::get_search_query_key( $search_query, self::$relevance_prefix );
 		}
 
+		// Delete the tallies
+		$tally_rows_deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM $wpdb->options WHERE option_name IN ( '" . implode( "', '", $wpdb->escape( $option_names_to_delete ) ) . "' )" ) );
+
+		// Delete the relevance scores
+		$relevance_rows_deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM $wpdb->postmeta WHERE meta_key IN ( '" . implode( "', '", $wpdb->escape( $relevance_keys_to_delete ) ) . "' )" ) );
 	}
+
 
 	/**
 	 * Returns a DB safe key from a given search query by replaces spaces with _.
@@ -1061,22 +1148,31 @@ class FS_Simple_Search {
 	 * @package Simple Search
 	 * @since 1.0
 	 */
-	public static function search_query_metakey( $search_query ) {
+	public static function get_search_query_key( $search_query, $prefix ) {
 
 		$search_query_metakey = self::strip_string_bare( $search_query );
 		$search_query_metakey = str_replace( ' ', '_', preg_replace( '/\s{2,}/', ' ', $search_query_metakey ) );
 
-		return '_fss_relevance_' . $search_query_metakey;
+		return $prefix . $search_query_metakey;
 	}
 
+
+	/**
+	 * Adds a "monthly" cron schedule to teh 
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function add_custom_cron_schedules( $schedules ) {
+
+		$schedules['monthly'] = array(
+			'interval' => 60 * 60 * 24 * 30, // roughly one month in seconds
+			'display'  => __( 'Once Monthly' ),
+		);
+
+		return $schedules;
+	}
 }
-
-function tester(){
-
-	foreach( array( 'string      with    space ', 'strin1234 zxv$*%0   <a href="http://asdf">test</a>  asdf' ) as $search_query )
-		FS_Simple_Search::search_query_metakey( $search_query );
-
-}
-//add_action('init', 'tester');
 
 endif;
