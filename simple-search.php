@@ -461,10 +461,6 @@ class FS_Simple_Search {
 
 		/* Non-Search Term Ranking Factors */
 
-		// Recency (freshness) of Page Creation
-		$recency_multipler = 1 - log( current_time( 'timestamp' ) / mysql2date( 'G', $post->post_date ) ) * 100; // Relevance of recency is not linear - the closer it is, the more important it is - so use a logaritm 
-		$relevance += $moderate_importance * round( $recency_multipler, 2 );
-
 		// Historical Content Changes
 		$revision_increment = $low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
 		$relevance += ( $revision_increment > $low_importance ) ? $low_importance : $revision_increment;
