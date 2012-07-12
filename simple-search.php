@@ -1013,7 +1013,7 @@ class FS_Simple_Search {
 		/* Re-index post relevance in two minutes (so it's up-to-date) and then again in a day and week (to account for impact of recenecy on relevance) */
 		wp_clear_scheduled_hook( 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
 		wp_schedule_single_event( time() + 60 * 2, 'fss_build_post_relevance_index', array( 'post_id' => $post_id ) );
-		//self::build_post_relevance_index( $post_id );
+
 	}
 
 
@@ -1086,6 +1086,8 @@ class FS_Simple_Search {
 
 		/* 2-9 word search terms with frequency > 2 */
 		for( $phrase_length = 2; $phrase_length < 10; $phrase_length++ ) {
+
+			$phrases = array();
 
 			foreach ( $words as $index => $word )
 				if ( isset( $words[$index + $phrase_length] ) )
