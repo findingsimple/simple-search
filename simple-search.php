@@ -56,6 +56,14 @@ class FS_Simple_Search {
 
 	static $did_you_mean_prefix = '_fss_did_you_mean_';
 
+	/* Relevance Weights based on SEOmoz's Importance Scale */
+
+	static $very_high_importance = 13;
+	static $high_importance      = 8;
+	static $moderate_importance  = 5;
+	static $low_importance       = 3;
+	static $minimal_importance   = 2;
+
 	/**
 	 * Hook into WordPress where appropriate.
 	 * 
@@ -336,13 +344,6 @@ class FS_Simple_Search {
 
 		$post_content_word_count = count( $search_query_tokens );
 
-		/* Relevance Weights based on SEOmoz Importance Scale */
-	 	$very_high_importance = 13;
-	 	$high_importance      = 8;
-	 	$moderate_importance  = 5;
-	 	$low_importance       = 3;
-	 	$minimal_importance   = 2;
-
 		// URL
 		$permalink = get_permalink( $post->ID );
 
@@ -354,13 +355,13 @@ class FS_Simple_Search {
 
 		// Search Query Anywhere in the Title
 		if( substr_count( $post_title, $search_query ) > 0 )
-			$relevance += $very_high_importance;
+			$relevance += self::$very_high_importance;
 		else
 			$single_checks[] = 'title';
 
 		// Search Query as the First Word(s) of the Title Tag
 		if( substr( $post_title, 0, strlen( $search_query ) ) == $search_query )
-			$relevance += $very_high_importance;
+			$relevance += self::$very_high_importance;
 		else
 			$single_checks[] = 'title-beginning';
 
@@ -368,27 +369,27 @@ class FS_Simple_Search {
 		preg_match( '/\s*(?:\S*\s*){0,50}/', $post_content, $first_fifty );
 
 		if( substr_count( $first_fifty[0], $search_query ) > 0 )
-			$relevance += $moderate_importance;
+			$relevance += self::$moderate_importance;
 		else
 			$single_checks[] = 'first-fifty';
 
 		// Search Query in the Page Name URL
 		if( substr_count( $permalink, $search_query ) > 0 )
-			$relevance += $low_importance;
+			$relevance += self::$low_importance;
 		else
 			$single_checks[] = 'permalink';
 
 		// Search Query Frequency
 		$search_occurances = substr_count( $post_content, $search_query ); 
 		if( $search_occurances > 0 )
-			$relevance += ( $search_occurances > 100 ) ? $minimal_importance : $minimal_importance * $search_occurances / 100;
+			$relevance += ( $search_occurances > 100 ) ? self::$minimal_importance : self::$minimal_importance * $search_occurances / 100;
 		else
 			$single_checks[] = 'frequency';
 
 		// Search Query in content
 		$search_density = $search_occurances / $post_content_word_count; 
 		if( $search_density > 0 )
-			$relevance += ( $search_density > 1 ) ? $minimal_importance : $minimal_importance * $search_density;
+			$relevance += ( $search_density > 1 ) ? self::$minimal_importance : self::$minimal_importance * $search_density;
 		else
 			$single_checks[] = 'density';
 
@@ -398,7 +399,7 @@ class FS_Simple_Search {
 			$taxonomy_terms = wp_get_object_terms( $post->ID, get_object_taxonomies( $post->post_type ), array( 'fields' => 'names' ) );
 
 			if( in_array( $search_query, $taxonomy_terms ) )
-				$relevance += $minimal_importance;
+				$relevance += self::$minimal_importance;
 			else
 				$single_checks[] = 'taxonomy';
 		}
@@ -424,33 +425,33 @@ class FS_Simple_Search {
 					switch( $check ) {
 						case 'title' : 
 							if( substr_count( $post_title, $search_token ) > 0 )
-								$relevance += $very_high_importance / $search_query_term_count; // Add a maximum of 13
+								$relevance += self::$very_high_importance / $search_query_term_count; // Add a maximum of 13
 							break;
 						case 'title-beginning' : 
 							if( substr( $post_title, 0, strlen( $search_token ) ) == $search_token )
-								$relevance += $very_high_importance / $search_query_term_count;
+								$relevance += self::$very_high_importance / $search_query_term_count;
 							break;
 						case 'first-fifty' : 
 							if( substr_count( $first_fifty[0], $search_token ) > 0 )
-								$relevance += $moderate_importance / $search_query_term_count; // Add a maximum of 5
+								$relevance += self::$moderate_importance / $search_query_term_count; // Add a maximum of 5
 							break;
 						case 'permalink' : 
 							if( substr_count( $permalink, $search_token ) > 0 )
-								$relevance += $low_importance / $search_query_term_count; // Add a maximum of 3
+								$relevance += self::$low_importance / $search_query_term_count; // Add a maximum of 3
 							break;
 						case 'frequency' : 
 							$search_term_occurances = substr_count( $post_content, $search_token ); 
 							if( $search_term_occurances > 0 )
-								$relevance += ( $search_term_occurances > 100 ) ? $minimal_importance / $search_query_term_count : $minimal_importance / $search_query_term_count * $search_term_occurances / 100;
+								$relevance += ( $search_term_occurances > 100 ) ? self::$minimal_importance / $search_query_term_count : self::$minimal_importance / $search_query_term_count * $search_term_occurances / 100;
 							break;
 						case 'density' :
 							$search_term_density = substr_count( $post_content, $search_token ) / $post_content_word_count; 
 							if( $search_term_density > 0 )
-								$relevance += ( $search_term_density > 1 ) ? $minimal_importance / $search_query_term_count : $minimal_importance / $search_query_term_count * $search_term_density;
+								$relevance += ( $search_term_density > 1 ) ? self::$minimal_importance / $search_query_term_count : self::$minimal_importance / $search_query_term_count * $search_term_density;
 							break;
 						case 'taxonomy' :
 							if( ! empty( $object_taxonomies ) && in_array( $search_token, $taxonomy_terms ) )
-								$relevance += $minimal_importance / $search_query_term_count;
+								$relevance += self::$minimal_importance / $search_query_term_count;
 							break;
 						default :
 							break;
@@ -462,13 +463,13 @@ class FS_Simple_Search {
 		/* Non-Search Term Ranking Factors */
 
 		// Historical Content Changes
-		$revision_increment = $low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
-		$relevance += ( $revision_increment > $low_importance ) ? $low_importance : $revision_increment;
+		$revision_increment = self::$low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
+		$relevance += ( $revision_increment > self::$low_importance ) ? self::$low_importance : $revision_increment;
 
 		// Number of Comments on post
 		$comment_count = get_comments_number( $post->ID );
 		if( $comment_count > 0 )
-			$relevance += ( $comment_count > 100 ) ? $low_importance : $low_importance * $comment_count / 100;
+			$relevance += ( $comment_count > 100 ) ? self::$low_importance : self::$low_importance * $comment_count / 100;
 
 		$post->relevance = $relevance;
 
