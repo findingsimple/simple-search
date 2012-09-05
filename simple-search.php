@@ -502,9 +502,7 @@ class FS_Simple_Search {
 
 		$terms = array_unique( explode( " ", self::remove_punctuation( $search_query ) ) );
 
-		$content = apply_filters( 'the_content', $post->post_content );
-
-		$content = do_shortcode( $content );
+		$content = strip_shortcodes( $post->post_content );
 
 		$content = self::strip_invisibles( $content ); // removes <script>, <embed> &c with content
 		$content = strip_tags( $content ); // this removes the tags, but leaves the content
