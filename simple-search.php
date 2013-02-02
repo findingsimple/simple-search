@@ -1062,6 +1062,9 @@ class FS_Simple_Search {
 			case 4 : // Reschedule for a fortnight
 				$time = time() + 60 * 60 * 24 * 7 * 2;
 				break;
+			case 5 : // Reschedule for a month
+				$time = time() + 60 * 60 * 24 * 30;
+				break;
 			default : // Don't reschedule
 				$time = false;
 				break;
