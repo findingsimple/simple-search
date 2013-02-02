@@ -58,11 +58,12 @@ class FS_Simple_Search {
 
 	/* Relevance Weights based on SEOmoz's Importance Scale */
 
-	static $very_high_importance = 13;
-	static $high_importance      = 8;
-	static $moderate_importance  = 5;
-	static $low_importance       = 3;
-	static $minimal_importance   = 2;
+	static $short_circuit_importance = 100;
+	static $very_high_importance     = 13;
+	static $high_importance          = 8;
+	static $moderate_importance      = 5;
+	static $low_importance           = 3;
+	static $minimal_importance       = 2;
 
 	/* Flag for preventing infinite loops */
 
@@ -358,8 +359,10 @@ class FS_Simple_Search {
 
 		/* On-Page (Keyword-Specific) Ranking Factors */
 
-		// Search Query Anywhere in the Title
-		if( substr_count( $post_title, $search_query ) > 0 )
+		// Search Query is title or appears in title
+		if( 0 === strcasecmp( $post_title, $search_query ) )
+			$relevance += $short_circuit_importance;
+		elseif( substr_count( $post_title, $search_query ) > 0 )
 			$relevance += self::$very_high_importance;
 		else
 			$single_checks[] = 'title';
@@ -370,7 +373,7 @@ class FS_Simple_Search {
 		else
 			$single_checks[] = 'title-beginning';
 
-		// Search Query in the First 50 Words
+		// Search Query in the First 50 Words of post content
 		preg_match( '/\s*(?:\S*\s*){0,50}/', $post_content, $first_fifty );
 
 		if( substr_count( $first_fifty[0], $search_query ) > 0 )
