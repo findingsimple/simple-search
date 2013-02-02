@@ -64,6 +64,10 @@ class FS_Simple_Search {
 	static $low_importance       = 3;
 	static $minimal_importance   = 2;
 
+	/* Flag for preventing infinite loops */
+
+	static $mid_search = false;
+
 	/**
 	 * Hook into WordPress where appropriate.
 	 * 
@@ -335,7 +339,8 @@ class FS_Simple_Search {
 
 		// Ignore all punctuation & invisibles in search terms & post items
 		$post_title   = strtolower( self::remove_punctuation( self::strip_invisibles( $post->post_title ) ) );
-		$post_content = strtolower( self::remove_punctuation( self::strip_invisibles( $post->post_content ) ) );
+		$post_content = apply_filters( 'the_content', $post->post_content );
+		$post_content = strtolower( self::remove_punctuation( self::strip_invisibles( $post_content ) ) );
 		$search_query = strtolower( self::remove_punctuation( $search_query ) );
 
 		$search_query_tokens = array_unique( explode( " ", $search_query) );
@@ -493,8 +498,10 @@ class FS_Simple_Search {
 	public static function get_search_excerpt( $original_excerpt ) {
 		global $post;
 
-		if( ! is_search() )
+		if( ! is_search() || self::$mid_search === true )
 			return $original_excerpt;
+
+		self::$mid_search = true;
 
 		$search_query = urldecode( get_search_query() );
 
@@ -503,7 +510,9 @@ class FS_Simple_Search {
 
 		$terms = array_unique( explode( " ", self::remove_punctuation( $search_query ) ) );
 
-		$content = strip_shortcodes( $post->post_content );
+		$content = apply_filters( 'the_content', $post->post_content );
+
+		$content = do_shortcode( $content );
 
 		$content = self::strip_invisibles( $content ); // removes <script>, <embed> &c with content
 		$content = strip_tags( $content ); // this removes the tags, but leaves the content
@@ -572,6 +581,8 @@ class FS_Simple_Search {
 			$excerpt = "..." . $excerpt;
 
 		$excerpt = $excerpt . "...";
+
+		self::$mid_search = false;
 
 		return $excerpt;
 	}
@@ -1072,7 +1083,8 @@ class FS_Simple_Search {
 
 		$post = get_post( $post_id );
 
-		$content = strtolower( self::strip_string_bare( $post->post_content ) );
+		$content = apply_filters( 'the_content', $post->post_content );
+		$content = strtolower( self::strip_string_bare( $content ) );
 
 		/* Individual Term */
 
