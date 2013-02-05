@@ -1088,41 +1088,17 @@ class FS_Simple_Search {
 	 * @since 1.0
 	 */
 	public static function build_post_relevance_index( $post_id ) {
+		global $post, $wpdb;
 
-		$post = get_post( $post_id );
+		$post = get_post( $post_id ); // Also sets the global $post var for functions hooked to 'the_content' which expect to be run in the loop
 
-		$content = apply_filters( 'the_content', $post->post_content );
-		$content = strtolower( self::strip_string_bare( $content ) );
+		/* Cache for all existing searches */
+		$search_query_keys = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s", self::$tally_prefix . '%' ) );
 
-		/* Individual Term */
-
-		$words = str_word_count( $content, 1 );
-
-		$words_and_counts = array_count_values( array_diff( $words, self::get_stop_words() ) );
-
-		/* Only cache for words with a frequency > 2 */
-		$words_and_counts = array_filter( $words_and_counts, create_function( '$a', 'return $a >= 2;' ) );
-
-		/* 2-9 word search terms with frequency > 2 */
-		for( $phrase_length = 2; $phrase_length < 10; $phrase_length++ ) {
-
-			$phrases = array();
-
-			foreach ( $words as $index => $word )
-				if ( isset( $words[$index + $phrase_length] ) )
-					$phrases[] = implode( ' ', array_slice( $words, $index, $phrase_length ) );
-
-			$phrases_and_counts = array_count_values( $phrases );
-
-			arsort( $phrases_and_counts );
-
-			$phrases_and_counts = array_filter( $phrases_and_counts, create_function( '$a', 'return $a >= 2;' ) );
-		}
-
-		foreach( array_merge( $words_and_counts, $phrases_and_counts ) as $search_query => $frequency ) {
+		foreach( $search_query_keys as $search_query_key ) {
 			unset( $post->relevance );
-			$relevance = self::calculate_relevance_for_post( $post, $search_query );
-			update_post_meta( $post_id, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
+			$search_query = self::get_search_query_from_key( $search_query_key );
+			self::calculate_relevance_for_post( $post, $search_query );
 		}
 	}
 
