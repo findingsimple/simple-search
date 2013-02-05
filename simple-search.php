@@ -1146,7 +1146,7 @@ class FS_Simple_Search {
 		$relevance_keys_to_delete = array();
 
 		foreach( $option_names_to_delete as $option_name ) {
-			$search_query = str_replace( self::$tally_prefix, '', $option_name );
+			$search_query = self::get_search_query_from_key( $option_name );
 			$relevance_keys_to_delete[] = self::get_search_query_key( $search_query, self::$relevance_prefix );
 		}
 
@@ -1168,11 +1168,27 @@ class FS_Simple_Search {
 	public static function get_search_query_key( $search_query, $prefix ) {
 
 		$search_query_metakey = self::strip_string_bare( $search_query );
-		$search_query_metakey = str_replace( ' ', '_', preg_replace( '/\s{2,}/', ' ', $search_query_metakey ) );
+		$search_query_metakey = str_replace( ' ', '_', preg_replace( '/\s{2,}/', ' ', strtolower( $search_query_metakey ) ) );
 
 		return $prefix . $search_query_metakey;
 	}
 
+
+	/**
+	 * Returns the search query from DB meta key.
+	 * 
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 1.0
+	 */
+	public static function get_search_query_from_key( $search_query_key ) {
+
+		$search_query = str_replace( self::$relevance_prefix, '', strtolower( $search_query_key ) );
+		$search_query = str_replace( self::$tally_prefix, '', strtolower( $search_query_key ) );
+		$search_query = str_replace( '_', ' ', $search_query );
+
+		return $search_query;
+	}
 
 	/**
 	 * Adds a "monthly" cron schedule to teh 
