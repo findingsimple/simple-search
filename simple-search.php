@@ -4,7 +4,7 @@ Plugin Name: Simple Search
 Description: Give your visitors what they're looking for. 
 Author: _FindingSimple
 Author URI: http://findingsimple.com/
-Version: 1.0
+Version: 2.0
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
