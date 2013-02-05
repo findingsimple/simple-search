@@ -1291,7 +1291,6 @@ jQuery(document).ready(function($){
 		$.post(fsAjaxUrl, requestData, function(response) {
 			response = $.parseJSON(response);
 
-			$('.rebuilding-message').slideUp(200);
 			$(response.html).hide().appendTo('#fss_search_index').slideUp().slideDown(1000);
 
 			updatedIDs = response.updated_ids;
@@ -1299,8 +1298,9 @@ jQuery(document).ready(function($){
 			if ('processing' == response.status) {
 				setTimeout(function() {
 					check_rebuild_progress(updatedIDs);
-				}, 2000);
+				}, 3000);
 			} else {
+				$('.rebuilding-message').slideUp(200);
 				$('#fss_index_loading').fadeOut(200);
 			}
 		});
