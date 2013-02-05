@@ -346,8 +346,10 @@ class FS_Simple_Search {
 
 		$relevance = get_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), true );
 
-		if ( ! empty( $relevance ) )
+		if ( ! empty( $relevance ) ) {
+			$post->relevance = $relevance;
 			return $relevance;
+		}
 
 		$relevance = 1;
 
@@ -374,7 +376,7 @@ class FS_Simple_Search {
 
 		// Search Query is title or appears in title
 		if( 0 === strcasecmp( $post_title, $search_query ) )
-			$relevance += $short_circuit_importance;
+			$relevance += self::$short_circuit_importance;
 		elseif( substr_count( $post_title, $search_query ) > 0 )
 			$relevance += self::$very_high_importance;
 		else
