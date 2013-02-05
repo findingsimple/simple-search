@@ -114,6 +114,14 @@ class FS_Simple_Search {
 		add_action( 'fss_clean_search_index', __CLASS__ . '::clean_search_index' );
 
 		add_filter( 'cron_schedules', __CLASS__ . '::add_custom_cron_schedules' );
+
+		add_action( 'admin_menu', __CLASS__ . '::add_search_tools_page' );
+
+		add_action( 'wp_ajax_fss_initiate_search_index_rebuild', __CLASS__ . '::initiate_search_index_rebuild', 10, 2 );
+
+		add_action( 'wp_ajax_nopriv_fss_rebuild_search_index', __CLASS__ . '::rebuild_entire_search_index', 10, 2 );
+
+		add_action( 'wp_ajax_fss_check_search_index_progress', __CLASS__ . '::check_search_index_progress', 10, 2 );
 	}
 
 	/**
@@ -1203,6 +1211,241 @@ class FS_Simple_Search {
 		);
 
 		return $schedules;
+	}
+
+
+	/**
+	 * Adds a Search admin screen to the Tools section
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function add_search_tools_page() {
+		add_management_page( 'Rebuild Search Cache', __( 'Search', self::$text_domain ), 'manage_options', 'fss_search_tools', __CLASS__ . '::search_tools_page' );
+	}
+
+
+	/**
+	 * Provide a timeout resistant interface for rebuilding the search query index.
+	 *
+	 * Uses inline JS for Ajax polling to check on the status of @see self::rebuild_entire_search_index().
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function search_tools_page() { ?>
+<div class="wrap">
+	<div id="icon-tools" class="icon32"><br></div>
+	<h2>Search Tools</h2>
+	<table class="form-table">
+		<tbody>
+			<tr valign="top">
+				<th scope="row"><label for="blogname"><?php _e( 'Rebuild Search Index', self::$text_domain ); ?></label></th>
+				<td>
+					<div id='fss_search_index'>
+						<button id='fss_recalculate_relevance' class='button-secondary'><?php _e( 'Rebuild Index', self::$text_domain ); ?></button>
+						<p class='description'>
+							<?php _e( 'If you find content missing from search results or search results are not as relevant as they should be, you can rebuild the search query relevance index. This recalculates relevance scores for all content on your site for all search queries that have been made in the past.', self::$text_domain ); ?>
+						</p>
+					</div>
+					<img id="fss_index_loading" src="<?php echo admin_url( '/images/loading.gif' ); ?>" style="display: none;"/>
+				</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+<script type="text/javascript">
+jQuery(document).ready(function($){
+	var updatedIDs = new Array(),
+		fsAjaxUrl = "<?php echo admin_url( 'admin-ajax.php' ); ?>",
+		nonce = '<?php echo wp_create_nonce( __FILE__ ); ?>';
+
+	$('#fss_recalculate_relevance').on('click',function(){
+		$('#fss_search_index').fadeOut(400,function(){
+			$('#fss_index_loading').fadeIn(200);
+			$('#fss_recalculate_relevance').remove();
+			$('#fss_search_index').html('<p class="description rebuilding-message">Cache is being rebuilt. Please do not reload the page.</p>').fadeIn(400,function(){
+				var data = {
+						action:   'fss_initiate_search_index_rebuild',
+						_wpnonce: nonce,
+					};
+
+				// Start the index update then check the progress
+				$.post( fsAjaxUrl, data, function(response) {
+					check_rebuild_progress(updatedIDs);
+				});
+			});
+		});
+		return false;
+	});
+
+	function check_rebuild_progress( updatedIDs ) {
+		var requestData = {
+			action:   'fss_check_search_index_progress',
+			known_ids: updatedIDs,
+			_wpnonce: nonce,
+		};
+
+		$.post(fsAjaxUrl, requestData, function(response) {
+			response = $.parseJSON(response);
+
+			$('.rebuilding-message').slideUp(200);
+			$(response.html).hide().appendTo('#fss_search_index').slideUp().slideDown(1000);
+
+			updatedIDs = response.updated_ids;
+
+			if ('processing' == response.status) {
+				setTimeout(function() {
+					check_rebuild_progress(updatedIDs);
+				}, 2000);
+			} else {
+				$('#fss_index_loading').fadeOut(200);
+			}
+		});
+	}
+});
+</script>
+<?php
+	}
+
+
+	/**
+	 * Fires an async HTTP request to initiate the rebuilding of the search index.
+	 *
+	 * Hooked to the 'wp_ajax_fss_initiate_search_index_rebuild' ajax action.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function initiate_search_index_rebuild() {
+
+		check_ajax_referer( __FILE__ );
+
+		// Flag for the request to check it came from us, can't use nonce API as it relies on the user being logged in
+		$nonce = wp_create_nonce( __FILE__ );
+		set_transient( 'fss_build_index_token', $nonce, 5 );
+
+		$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array(
+			'timeout'     => 1,
+			'blocking'    => false,
+			'headers'     => array(),
+			'body'        => array(
+				'action' => 'fss_rebuild_search_index',
+				'token'  => $nonce
+				),
+		    )
+		);
+
+		die();
+	}
+
+
+	/**
+	 * Rebuilds the entire search index by:
+	 *  1. deleting all existing '_fss_relevance_*' entires
+	 *  2. getting all previes search queries as stored in the search tally
+	 *  3. calculates & stores the relevance for every post for every previous search query
+	 *
+	 * Hooked to the 'wp_ajax_nopriv_fss_rebuild_search_index' Ajax action because the request
+	 * is run asynchronously there is no logged in user making the request.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function rebuild_entire_search_index() {
+		global $wpdb;
+
+		$index_token = get_transient( 'fss_build_index_token' );
+
+		if ( $_POST['token'] != $index_token )
+			die();
+
+		set_time_limit(0);
+
+		// Delete any previuosly completed flags
+		delete_option( 'fss_search_index_rebuilt' );
+
+		// Delete all existing relevance scores
+		$deleted_rows = $wpdb->query( $wpdb->prepare( "DELETE FROM $wpdb->postmeta WHERE meta_key LIKE %s ", self::$relevance_prefix . '%' ) );
+
+		if ( $deleted_rows > 0 )
+			update_option( 'fss_search_index_delete_rows', $deleted_rows );
+
+		$all_post_ids = get_posts( array(
+			'numberposts' => -1,
+			'post_type'   => 'any',
+			'fields'      => 'ids',
+			)
+		);
+
+		$updated_ids = array();
+
+		foreach ( $all_post_ids as $post_id ) {
+
+			self::build_post_relevance_index( $post_id );
+
+			$updated_ids[] = $post_id;
+
+			update_option( 'fss_search_index_progress', $updated_ids );
+		}
+
+		delete_transient( 'fss_build_index_token' );
+		add_option( 'fss_search_index_rebuilt', 'true' );
+
+		die();
+	}
+
+
+	/**
+	 * Returns a progress report on the search index building status.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function check_search_index_progress() {
+
+		check_ajax_referer( __FILE__ );
+
+		$known_ids        = isset( $_POST['known_ids'] ) ? $_POST['known_ids'] : array();
+		$updated_ids      = get_option( 'fss_search_index_progress', array() );
+		$rebuild_complete = get_option( 'fss_search_index_rebuilt', 'false' );
+
+		$new_ids = array_diff( $updated_ids, $known_ids );
+
+		$deleted_rows = get_option( 'fss_search_index_delete_rows', '' );
+
+		$status = 'processing';
+		$html   = '<div class="updated-relevance-scores">';
+
+		if ( ! empty( $deleted_rows ) ) {
+			$html .= sprintf( __( "<p><strong>Deleted %s indexed relevance scores.</strong></p>\n", self::$text_domain ), $deleted_rows );
+			delete_option( 'fss_search_index_delete_rows' );
+		}
+
+		foreach ( $new_ids as $new_id )
+			$html .= sprintf( __( "<div><strong>Updated:</strong> %s (ID: %s)</div>\n", self::$text_domain ), get_the_title( $new_id ), $new_id );
+
+		if ( 'true' === $rebuild_complete ) {
+			delete_option( 'fss_search_index_progress' );
+			$status = 'complete';
+			$html  .= '<p><strong>' . __( 'Search index successfully rebuilt!', self::$text_domain ) . '</strong></p>';
+		}
+
+		$html  .= '</div>';
+
+		echo json_encode( array(
+			'updated_ids' => $updated_ids,
+			'status'      => $status,
+			'html'        => $html,
+			)
+		);
+
+		die();
 	}
 }
 
