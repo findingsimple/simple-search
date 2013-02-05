@@ -82,7 +82,6 @@ class FS_Simple_Search {
 
 		add_filter( 'search_link', __CLASS__ . '::search_link', 10, 2 );
 
-		add_filter( 'the_posts', __CLASS__ . '::order_by_relevance', 10, 2 );
 
 		add_filter( 'get_the_excerpt', __CLASS__ . '::get_search_excerpt', 1 );
 
@@ -228,29 +227,6 @@ class FS_Simple_Search {
 
 
 	/**
-	 * Order search results by relevance. 
-	 * 
-	 * @author Brent Shepherd <brent@findingsimple.com>
-	 * @package Simple Search
-	 * @since 1.0
-	 */
-	public static function order_by_relevance( $posts, &$query ) {
-
-		if( ! is_search() )
-			return $posts;
-
-		$search_query = get_search_query( false );
-
-		if( empty( $search_query ) || $search_query == '~' )
-			return $posts;
-
-		usort( $posts, array( __CLASS__, 'compare_posts_by_relevance' ) );
-
-		return $posts;
-	}
-
-
-	/**
 	 * Keep a tally of the number of times this query has been searched for. 
 	 * 
 	 * Hooked to shutdown so that it only fires once.
@@ -277,32 +253,6 @@ class FS_Simple_Search {
 		// Make sure the search index is being cleaned once per month
 		if ( ! wp_next_scheduled( 'fss_clean_search_index' ) )
 			wp_schedule_event( current_time( 'timestamp' ), 'monthly', 'fss_clean_search_index' );
-	}
-
-
-	/**
-	 * Sorting function that compares the relevance of two posts for a given search query.
-	 * 
-	 * @uses self::calculate_relevance_for_post to determine the posts relevance. 
-	 * 
-	 * @author Brent Shepherd <brent@findingsimple.com>
-	 * @package Simple Search
-	 * @since 1.0
-	 */
-	public static function compare_posts_by_relevance( $post_a, $post_b ) {
-
-		$search_query = urldecode( get_search_query( false ) );
-
-		$post_a_relevance = self::calculate_relevance_for_post( $post_a, $search_query );
-
-		$post_b_relevance = self::calculate_relevance_for_post( $post_b, $search_query );
-
-		if( $post_a_relevance == $post_b_relevance )
-		    return 0;
-		if( $post_a_relevance > $post_b_relevance )
-		    return -1;
-		else
-			return 1;
 	}
 
 
