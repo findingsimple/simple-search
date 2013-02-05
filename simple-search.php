@@ -1207,7 +1207,7 @@ class FS_Simple_Search {
 
 		$schedules['monthly'] = array(
 			'interval' => 60 * 60 * 24 * 30, // roughly one month in seconds
-			'display'  => __( 'Once Monthly' ),
+			'display'  => __( 'Once Monthly', self::$text_domain ),
 		);
 
 		return $schedules;
