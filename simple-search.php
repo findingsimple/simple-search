@@ -108,7 +108,8 @@ class FS_Simple_Search {
 
 		add_action( 'shutdown', __CLASS__ . '::search_query_tally' );
 
-		add_action( 'fss_clean_search_cache', __CLASS__ . '::clean_search_cache' );
+		add_action( 'fss_clean_search_cache', __CLASS__ . '::clean_search_index' );
+		add_action( 'fss_clean_search_index', __CLASS__ . '::clean_search_index' );
 
 		add_filter( 'cron_schedules', __CLASS__ . '::add_custom_cron_schedules' );
 	}
@@ -154,7 +155,7 @@ class FS_Simple_Search {
 
 		$did_you_mean = get_option( self::get_search_query_key( $search_query, self::$did_you_mean_prefix ), array() );
 
-		// Only calculate did_you_mean if none already cached
+		// Only calculate did_you_mean if none already indexed
 		if ( empty( $did_you_mean ) ) {
 
 			$search_query_tokens = explode( " ", $search_query) ;
@@ -273,9 +274,9 @@ class FS_Simple_Search {
 
 		update_option( self::get_search_query_key( $search_query, self::$tally_prefix ), $search_tally + 1 );
 
-		// Make sure the search cache is being cleaned once per month
-		if ( ! wp_next_scheduled( 'fss_clean_search_cache' ) )
-			wp_schedule_event( current_time( 'timestamp' ), 'monthly', 'fss_clean_search_cache' );
+		// Make sure the search index is being cleaned once per month
+		if ( ! wp_next_scheduled( 'fss_clean_search_index' ) )
+			wp_schedule_event( current_time( 'timestamp' ), 'monthly', 'fss_clean_search_index' );
 	}
 
 
@@ -1079,8 +1080,9 @@ class FS_Simple_Search {
 
 
 	/**
-	 * When a post is saved, calculate and store its relevance for the most common terms and phrases in the post.
-	 * 
+	 * When a post is saved or index is rebuilt, calculate and store a posts relevance score 
+	 * for previous search terms.
+	 *
 	 * @author Brent Shepherd <brent@findingsimple.com>
 	 * @package Simple Search
 	 * @since 1.0
@@ -1126,13 +1128,13 @@ class FS_Simple_Search {
 
 
 	/**
-	 * Scheduled to run once a month to clean search cache.
-	 * 
+	 * Scheduled to run once a month to clean search index.
+	 *
 	 * @author Brent Shepherd <brent@findingsimple.com>
 	 * @package Simple Search
 	 * @since 1.0
 	 */
-	public static function clean_search_cache() {
+	public static function clean_search_index() {
 		global $wpdb;
 
 		// Get all search queries with tally < 1
