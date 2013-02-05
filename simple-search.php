@@ -82,6 +82,9 @@ class FS_Simple_Search {
 
 		add_filter( 'search_link', __CLASS__ . '::search_link', 10, 2 );
 
+		add_filter( 'pre_get_posts', __CLASS__ . '::ensure_relevance_index_exists', 10, 2 );
+
+		add_filter( 'parse_query', __CLASS__ . '::order_by_relevance_value', 10, 2 );
 
 		add_filter( 'get_the_excerpt', __CLASS__ . '::get_search_excerpt', 1 );
 
@@ -221,6 +224,62 @@ class FS_Simple_Search {
 
 	<?php
 
+		}
+
+	}
+
+
+	/**
+	 * Before getting posts for a search query, make sure that the a relevance index for
+	 * that search query exists.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function ensure_relevance_index_exists( &$query ) {
+		global $wpdb;
+
+		if ( true == $query->is_search && '~' != $query->query_vars['s'] ) {
+
+			$search_query     = get_search_query( false );
+			$search_query_key = self::get_search_query_key( $search_query, self::$relevance_prefix );
+
+			$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->postmeta WHERE meta_key = %s", $search_query_key ) );
+
+			if ( $count <= 0 ) {
+
+				// Get all posts IDs (just IDs to avoid memory exhaustion)
+				$all_post_ids = get_posts( array(
+					'numberposts' => -1,
+					'post_type'   => 'any',
+					'fields'      => 'ids',
+					)
+				);
+
+				foreach ( $all_post_ids as $post_id ) {
+					$post_to_check = get_post( $post_id );
+					self::calculate_relevance_for_post( $post_to_check, $search_query );
+				}
+			}
+		}
+	}
+
+
+	/**
+	 * Order search results by pre-calculated relevance.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function order_by_relevance_value( &$query ) {
+
+		if ( true == $query->is_search && '~' != $query->query_vars['s'] ) { // can't use is_search() as it returns true for sub (non-search) queries
+			$search_query_meta_key = self::get_search_query_key( get_search_query( false ), self::$relevance_prefix );
+			$query->set( 'meta_key', $search_query_meta_key );
+			$query->set( 'orderby', 'meta_value_num' );
+			$query->set( 'order', 'DESC' );
 		}
 
 	}
@@ -673,18 +732,22 @@ class FS_Simple_Search {
 
 
 	/**
-	 * When the tilde character is being used for search, the search 
-	 * SQL query searches for all posts containing an blank space, which is
-	 * effectively everything. 
+	 * When the tilde character is being used for search, the search SQL query searches for
+	 * all posts containing an blank space, which is effectively everything.
 	 * 
 	 * @author Brent Shepherd <brent@findingsimple.com>
 	 * @package Simple Search
 	 * @since 1.0
 	 */
 	public static function search_all( $search_query, $query ) {
+		global $wpdb;
 
-		if( $query->query_vars['s'] == '~' )
-			$search_query  = str_replace( '~', ' ', $search_query );
+		if ( $query->query_vars['s'] == '~' )
+			$search_query = str_replace( '~', ' ', $search_query );
+		elseif( ! is_user_logged_in() )
+			$search_query = " AND ($wpdb->posts.post_password = '') ";
+		else
+			$search_query = ''; // We want everything that has a '_fss_relevance_{search_term}' meta key to account for content which has relevance based on shortcodes
 
 		return $search_query;
 	}
