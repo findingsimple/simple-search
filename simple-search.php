@@ -1138,7 +1138,7 @@ class FS_Simple_Search {
 		global $wpdb;
 
 		// Get all search queries with tally < 1
-		$option_names_to_delete = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s AND option_value < 4", self::$tally_prefix . '%' ) );
+		$option_names_to_delete = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s AND option_value < 2", self::$tally_prefix . '%' ) );
 
 		if ( empty( $option_names_to_delete ) )
 			return;
