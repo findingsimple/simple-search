@@ -336,10 +336,13 @@ class FS_Simple_Search {
 	 * @package Simple Search
 	 * @since 1.0
 	 */
-	public static function calculate_relevance_for_post( $post, $search_query ) {
+	public static function calculate_relevance_for_post( $post_to_check, $search_query ) {
+		global $post;
 
-		if( isset( $post->relevance ) ) // Already calculated relevance for this post 
-			return $post->relevance;
+		if( isset( $post_to_check->relevance ) ) // Already calculated relevance for this post 
+			return $post_to_check->relevance;
+
+		$post = $post_to_check;
 
 		$relevance = get_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), true );
 
