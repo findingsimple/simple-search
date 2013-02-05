@@ -483,21 +483,25 @@ class FS_Simple_Search {
 			}
 		}
 
-		/* Non-Search Term Ranking Factors */
+		/* Non-Search Term Ranking Factors to boost already relevant posts */
 
-		// Historical Content Changes
-		$revision_increment = self::$low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
-		$relevance += ( $revision_increment > self::$low_importance ) ? self::$low_importance : $revision_increment;
+		if ( $relevance > 1 ) {
 
-		// Number of Comments on post
-		$comment_count = get_comments_number( $post->ID );
-		if( $comment_count > 0 )
-			$relevance += ( $comment_count > 100 ) ? self::$low_importance : self::$low_importance * $comment_count / 100;
+			// Historical Content Changes
+			$revision_increment = self::$low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
+			$relevance += ( $revision_increment > self::$low_importance ) ? self::$low_importance : $revision_increment;
+
+			// Number of Comments on post
+			$comment_count = get_comments_number( $post->ID );
+			if( $comment_count > 0 )
+				$relevance += ( $comment_count > 100 ) ? self::$low_importance : self::$low_importance * $comment_count / 100;
+
+			// Store the relevance of this post against the search query if it has relevance
+			if ( $relevance > 1 )
+				update_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
+		}
 
 		$post->relevance = $relevance;
-
-		// Store the relevance of this post against the search query
-		update_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
 
 		return $relevance;
 	}
