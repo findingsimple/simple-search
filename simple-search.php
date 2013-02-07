@@ -104,9 +104,9 @@ class FS_Simple_Search {
 
 		add_action( 'save_post', __CLASS__ . '::schedule_relevance_index_building', 10, 2 );
 
-		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::build_post_relevance_index' );
+		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::build_post_relevance_index', 10 );
 
-		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::reschedule_relevance_index' );
+		add_action( 'fss_build_post_relevance_index', __CLASS__ . '::reschedule_relevance_index', 11 );
 
 		add_action( 'shutdown', __CLASS__ . '::search_query_tally' );
 
