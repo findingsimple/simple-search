@@ -1120,6 +1120,8 @@ class FS_Simple_Search {
 	public static function build_post_relevance_index( $post_id ) {
 		global $post, $wpdb;
 
+		set_time_limit(0);
+
 		$post = get_post( $post_id ); // Also sets the global $post var for functions hooked to 'the_content' which expect to be run in the loop
 
 		/* Cache for all existing searches */
