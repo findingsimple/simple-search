@@ -1224,7 +1224,7 @@ class FS_Simple_Search {
 	 * @since 2.0
 	 */
 	public static function add_search_tools_page() {
-		add_management_page( 'Rebuild Search Cache', __( 'Search', self::$text_domain ), 'manage_options', 'fss_search_tools', __CLASS__ . '::search_tools_page' );
+		add_management_page( 'Rebuild Search Cache', __( 'Search Index', self::$text_domain ), 'manage_options', 'fss_search_tools', __CLASS__ . '::search_tools_page' );
 	}
 
 
