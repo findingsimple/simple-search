@@ -1333,12 +1333,13 @@ jQuery(document).ready(function($){
 		$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array(
 			'timeout'     => 1,
 			'blocking'    => false,
+			'sslverify'   => false,
 			'headers'     => array(),
 			'body'        => array(
 				'action' => 'fss_rebuild_search_index',
 				'token'  => $nonce
 				),
-		    )
+			)
 		);
 
 		die();
