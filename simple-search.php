@@ -282,7 +282,10 @@ class FS_Simple_Search {
 	 * @since 2.0
 	 */
 	public static function order_by_relevance_value( &$query ) {
-
+		
+		if ( is_admin() )
+			return;
+		
 		if ( true == $query->is_search && '~' != $query->query_vars['s'] ) { // can't use is_search() as it returns true for sub (non-search) queries
 			$search_query_meta_key = self::get_search_query_key( get_search_query( false ), self::$relevance_prefix );
 			$query->set( 'meta_key', $search_query_meta_key );
@@ -757,6 +760,10 @@ class FS_Simple_Search {
 	 * @since 1.0
 	 */
 	public static function search_all( $search_query, $query ) {
+	
+		if ( is_admin() )	
+			return $search_query;
+			
 		global $wpdb;
 
 		if ( $query->query_vars['s'] == '~' )
