@@ -1356,7 +1356,7 @@ jQuery(document).ready(function($){
 	/**
 	 * Rebuilds the entire search index by:
 	 *  1. deleting all existing '_fss_relevance_*' entires
-	 *  2. getting all previes search queries as stored in the search tally
+	 *  2. getting all previous search queries as stored in the search tally
 	 *  3. calculates & stores the relevance for every post for every previous search query
 	 *
 	 * Hooked to the 'wp_ajax_nopriv_fss_rebuild_search_index' Ajax action because the request
