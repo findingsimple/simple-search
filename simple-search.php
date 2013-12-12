@@ -80,25 +80,29 @@ class FS_Simple_Search {
 
 		self::$text_domain = apply_filters( 'simple_search_text_domain', 'Simple_Search' );
 
-		add_filter( 'search_link', __CLASS__ . '::search_link', 10, 2 );
+		if ( ! is_admin() ) {
 
-		add_filter( 'pre_get_posts', __CLASS__ . '::ensure_relevance_index_exists', 10, 2 );
+			add_filter( 'search_link', __CLASS__ . '::search_link', 10, 2 );
 
-		add_filter( 'parse_query', __CLASS__ . '::order_by_relevance_value', 10, 2 );
+			add_filter( 'pre_get_posts', __CLASS__ . '::ensure_relevance_index_exists', 10, 2 );
 
-		add_filter( 'get_the_excerpt', __CLASS__ . '::get_search_excerpt', 1 );
+			add_filter( 'parse_query', __CLASS__ . '::order_by_relevance_value', 10, 2 );
 
-		add_filter( 'breadcrumb_trail_items', __CLASS__ . '::breadcrumb_trail_items', 10, 2 );
+			add_filter( 'get_the_excerpt', __CLASS__ . '::get_search_excerpt', 1 );
 
-		add_filter( 'posts_search', __CLASS__ . '::search_all', 10, 2 );
+			add_filter( 'breadcrumb_trail_items', __CLASS__ . '::breadcrumb_trail_items', 10, 2 );
 
-		add_filter( 'loop_pagination_args', __CLASS__ . '::add_filters_to_page_links' );
+			add_filter( 'posts_search', __CLASS__ . '::search_all', 10, 2 );
 
-		add_action( 'init', __CLASS__ . '::maybe_redirect_search' );
+			add_filter( 'loop_pagination_args', __CLASS__ . '::add_filters_to_page_links' );
 
-		add_action( 'parse_query', __CLASS__ . '::fix_query' );
+			add_action( 'init', __CLASS__ . '::maybe_redirect_search' );
 
-		add_filter( 'wp_title', __CLASS__ . '::seach_all_title' );
+			add_action( 'parse_query', __CLASS__ . '::fix_query' );
+
+			add_filter( 'wp_title', __CLASS__ . '::seach_all_title' );
+
+		}
 
 		add_action( 'init', __CLASS__ . '::make_pages_queryable', 20 );
 
@@ -282,9 +286,6 @@ class FS_Simple_Search {
 	 * @since 2.0
 	 */
 	public static function order_by_relevance_value( &$query ) {
-		
-		if ( is_admin() )
-			return;
 		
 		if ( true == $query->is_search && '~' != $query->query_vars['s'] ) { // can't use is_search() as it returns true for sub (non-search) queries
 			$search_query_meta_key = self::get_search_query_key( get_search_query( false ), self::$relevance_prefix );
@@ -760,9 +761,6 @@ class FS_Simple_Search {
 	 * @since 1.0
 	 */
 	public static function search_all( $search_query, $query ) {
-	
-		if ( is_admin() )	
-			return $search_query;
 			
 		global $wpdb;
 
