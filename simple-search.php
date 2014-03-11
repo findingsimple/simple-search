@@ -88,8 +88,6 @@ class FS_Simple_Search {
 
 			add_filter( 'parse_query', __CLASS__ . '::order_by_relevance_value', 10, 2 );
 
-			add_filter( 'get_the_excerpt', __CLASS__ . '::get_search_excerpt', 1 );
-
 			add_filter( 'breadcrumb_trail_items', __CLASS__ . '::breadcrumb_trail_items', 10, 2 );
 
 			add_filter( 'posts_search', __CLASS__ . '::search_all', 10, 2 );
@@ -330,8 +328,7 @@ class FS_Simple_Search {
 	/**
 	 * Determines the relevance score for a given post & search query. 
 	 * 
-	 * In determining relevance, a number of factors are used, including the post's title, taxonomy terms, permalink
-	 * comments & incoming links (trackbacks).
+	 * In determining relevance, a number of factors are used, including the post's title and permalink.
 	 * 
 	 * All factors & relevance weights are based on SEOmoz's reverse engineering of Google's PageRank algorithm through the 
 	 * Importance Scale found here: http://www.seomoz.org/article/search-ranking-factors/2009#ranking-factors
@@ -428,17 +425,6 @@ class FS_Simple_Search {
 		else
 			$single_checks[] = 'density';
 
-		// Search Query in taxonomy terms
-		$object_taxonomies = get_object_taxonomies( $post->post_type );
-		if( ! empty( $object_taxonomies ) ) {
-			$taxonomy_terms = wp_get_object_terms( $post->ID, get_object_taxonomies( $post->post_type ), array( 'fields' => 'names' ) );
-
-			if( in_array( $search_query, $taxonomy_terms ) )
-				$relevance += self::$minimal_importance;
-			else
-				$single_checks[] = 'taxonomy';
-		}
-
 		// Now run checks for individual search terms (in 2 loops instead of 7 loops if done without the $single_checks flags)
 		if( $search_query_term_count > 1 ) {
 
@@ -484,10 +470,6 @@ class FS_Simple_Search {
 							if( $search_term_density > 0 )
 								$relevance += ( $search_term_density > 1 ) ? self::$minimal_importance / $search_query_term_count : self::$minimal_importance / $search_query_term_count * $search_term_density;
 							break;
-						case 'taxonomy' :
-							if( ! empty( $object_taxonomies ) && in_array( $search_token, $taxonomy_terms ) )
-								$relevance += self::$minimal_importance / $search_query_term_count;
-							break;
 						default :
 							break;
 					}
@@ -495,167 +477,16 @@ class FS_Simple_Search {
 			}
 		}
 
-		/* Non-Search Term Ranking Factors to boost already relevant posts */
-
+		/** 
+		 * Store relevance
+		 */
 		if ( $relevance > 1 ) {
-
-			// Historical Content Changes
-			$revision_increment = self::$low_importance * count( wp_get_post_revisions( $post->ID ) ) / 100;
-			$relevance += ( $revision_increment > self::$low_importance ) ? self::$low_importance : $revision_increment;
-
-			// Number of Comments on post
-			$comment_count = get_comments_number( $post->ID );
-			if( $comment_count > 0 )
-				$relevance += ( $comment_count > 100 ) ? self::$low_importance : self::$low_importance * $comment_count / 100;
-
-			// Store the relevance of this post against the search query if it has relevance
-			if ( $relevance > 1 )
-				update_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
+			update_post_meta( $post->ID, self::get_search_query_key( $search_query, self::$relevance_prefix ), $relevance );
 		}
 
 		$post->relevance = $relevance;
 
 		return $relevance;
-	}
-
-
-	/**
-	 * On search result pages, this function creates a custom excerpt for the current post which includes the 
-	 * words in the current search query.
-	 * 
-	 * Based on the relevanssi relevanssi_do_excerpt & relevanssi_create_excerpt functions
-	 * 
-	 * @author Brent Shepherd <brent@findingsimple.com>
-	 * @package Simple Search
-	 * @since 1.0
-	 */
-	public static function get_search_excerpt( $original_excerpt ) {
-		global $post;
-
-		if( ! is_search() || self::$mid_search === true )
-			return $original_excerpt;
-
-		self::$mid_search = true;
-
-		$search_query = urldecode( get_search_query() );
-
-		if( empty( $search_query ) || $search_query == '~' )
-			return;
-
-		$terms = array_unique( explode( " ", self::remove_punctuation( $search_query ) ) );
-
-		$content = apply_filters( 'the_content', $post->post_content );
-
-		$content = do_shortcode( $content );
-
-		$content = self::strip_invisibles( $content ); // removes <script>, <embed> &c with content
-		$content = strip_tags( $content ); // this removes the tags, but leaves the content
-
-		$content = preg_replace( "/\n\r|\r\n|\n|\r/", " ", $content );
-
-		$excerpt_length = apply_filters( 'excerpt_length', 55 );
-
-		$best_excerpt_term_hits = -1;
-		$excerpt = "";
-
-		$content = " $content";	
-		$start = false;
-
-		$words = explode( ' ', $content );
-
-		$i = 0;
-
-		while( $i < count( $words ) ) {
-
-			if ( $i + $excerpt_length > count( $words ) )
-				$i = count( $words ) - $excerpt_length;
-
-			$excerpt_slice = array_slice( $words, $i, $excerpt_length );
-			$excerpt_slice = implode( ' ', $excerpt_slice );
-
-			$excerpt_slice = " $excerpt_slice";
-			$term_hits = 0;
-
-			foreach( array_keys( $terms ) as $term ) {
-				$term = " $term";
-				$pos = ( "" == $excerpt_slice ) ? false : stripos( $excerpt_slice, $term );
-				if ( false === $pos ) {
-					$titlecased = strtoupper( substr( $term, 0, 1 ) ) . substr( $term, 1 );
-					$pos = strpos( $excerpt_slice, $titlecased );
-					if ( false === $pos ) {
-						$pos = strpos( $excerpt_slice, strtoupper( $term ) );
-					}
-				}
-
-				if( false !== $pos ) {
-					$term_hits++;
-					if ( 0 == $i ) $start = true;
-					if ( $term_hits > $best_excerpt_term_hits ) {
-						$best_excerpt_term_hits = $term_hits;
-						$excerpt = $excerpt_slice;
-					}
-				}
-			}
-
-			$i += $excerpt_length;
-		}
-
-		if ( "" == $excerpt ) {
-			$excerpt = explode( ' ', $content, $excerpt_length );
-			array_pop( $excerpt );
-			$excerpt = implode( ' ', $excerpt );
-			$start = true;
-		}
-
-		$content = apply_filters( 'the_excerpt', $content );	
-
-		$excerpt = self::search_highlight_terms( $excerpt, $search_query );
-
-		if ( ! $start )
-			$excerpt = "..." . $excerpt;
-
-		$excerpt = $excerpt . "...";
-
-		self::$mid_search = false;
-
-		return $excerpt;
-	}
-
-
-	/**
-	 * Highlights the words in parameter one which match words in parameter two. Highlighting is done with HTML5 <mark> tag.
-	 * 
-	 * Based on the relevanssi relevanssi_highlight_terms & relevanssi_remove_nested_highlights functions
-	 * 
-	 * @author Brent Shepherd <brent@findingsimple.com>
-	 * @package Simple Search
-	 * @since 1.0
-	 */
-	public static function search_highlight_terms( $excerpt, $search_query ) {
-
-		$start_emp = "<mark>";
-		$end_emp = "</mark>";
-
-		$start_emp_token = "*[/";
-		$end_emp_token = "\]*";
-
-		$terms = array_unique( explode( " ", self::remove_punctuation( $search_query ) ) );
-
-		foreach( $terms as $term )
-			$excerpt = preg_replace("/(\b$term\b)(?!([^<]+)?>)/iu", $start_emp_token . '\\1' . $end_emp_token, $excerpt);
-
-		$excerpt = str_replace($start_emp_token, $start_emp, $excerpt);
-
-		$excerpt = str_replace($end_emp_token, $end_emp, $excerpt);
-
-		$excerpt = str_replace($end_emp . $start_emp, "", $excerpt);
-
-		if (function_exists('mb_ereg_replace')) {
-			$pattern = $end_emp . '\s*' . $start_emp;
-			$excerpt = mb_ereg_replace($pattern, " ", $excerpt);
-		}
-
-		return $excerpt;
 	}
 
 
