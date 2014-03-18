@@ -69,6 +69,8 @@ class FS_Simple_Search {
 
 	static $mid_search = false;
 
+	static $supress_relevance_based_search = false;
+
 	/**
 	 * Hook into WordPress where appropriate.
 	 * 
@@ -122,6 +124,9 @@ class FS_Simple_Search {
 		add_action( 'wp_ajax_fss_initiate_search_index_rebuild', __CLASS__ . '::initiate_search_index_rebuild', 10, 2 );
 
 		add_action( 'wp_ajax_nopriv_fss_rebuild_search_index', __CLASS__ . '::rebuild_entire_search_index', 10, 2 );
+
+		add_action( 'wp_ajax_fss_calculate_relevance_for_query', __CLASS__ . '::calculate_relevance_for_query', 10, 2 );
+		add_action( 'wp_ajax_nopriv_fss_calculate_relevance_for_query', __CLASS__ . '::calculate_relevance_for_query', 10, 2 );
 
 		add_action( 'wp_ajax_fss_check_search_index_progress', __CLASS__ . '::check_search_index_progress', 10, 2 );
 	}
@@ -241,7 +246,8 @@ class FS_Simple_Search {
 
 	/**
 	 * Before getting posts for a search query, make sure that the a relevance index for
-	 * that search query exists.
+	 * that search query exists. If it does not, trigger an aysnchronous request to calculate
+	 * the relevance scores for the new search query.
 	 *
 	 * @author Brent Shepherd <brent@findingsimple.com>
 	 * @package Simple Search
@@ -259,22 +265,65 @@ class FS_Simple_Search {
 
 			if ( $count <= 0 ) {
 
-				// Get all posts IDs (just IDs to avoid memory exhaustion)
-				$all_post_ids = get_posts( array(
-					'numberposts' => -1,
-					'post_type'   => 'any',
-					'fields'      => 'ids',
+				// Send the current user's cookies so that it can be run as the current user (if logged in)
+				foreach ( $_COOKIE as $name => $value ) {
+				    $cookies[] = new WP_Http_Cookie( array( 'name' => $name, 'value' => $value ) );
+				}
+
+				$response = wp_remote_post( admin_url( 'admin-ajax.php' ), array(
+					'timeout'     => 1,
+					'blocking'    => false,
+					'sslverify'   => false,
+					'headers'     => array(),
+					'cookies'     => $cookies,
+					'body'        => array(
+						'action'   => 'fss_calculate_relevance_for_query',
+						'query'    => urlencode( $search_query ),
+						'_wpnonce' => wp_create_nonce( 'fss_calculate_relevance_for_query' ),
+						),
 					)
 				);
 
-				foreach ( $all_post_ids as $post_id ) {
-					$post_to_check = get_post( $post_id );
-					self::calculate_relevance_for_post( $post_to_check, $search_query );
-				}
+				self::$supress_relevance_based_search = true;
+
 			}
 		}
 	}
 
+	/**
+	 * Calculates the scores for all posts for the search query stores in $_POST['query'].
+	 *
+	 * Used by @see self::ensure_relevance_index_exists() in a remote request to calculate relevance for
+	 * a new search query.
+	 *
+	 * @author Brent Shepherd <brent@findingsimple.com>
+	 * @package Simple Search
+	 * @since 2.0
+	 */
+	public static function calculate_relevance_for_query() {
+
+		check_ajax_referer( 'fss_calculate_relevance_for_query' );
+
+		set_time_limit(0);
+
+		$search_query = urldecode( $_POST['query'] );
+		$search_query_key = self::get_search_query_key( $search_query, self::$relevance_prefix );
+
+		// Get all posts IDs (just IDs to avoid memory exhaustion)
+		$all_post_ids = get_posts( array(
+			'numberposts' => -1,
+			'post_type'   => 'any',
+			'fields'      => 'ids',
+			)
+		);
+
+		foreach ( $all_post_ids as $post_id ) {
+			$post_to_check = get_post( $post_id );
+			self::calculate_relevance_for_post( $post_to_check, $search_query );
+		}
+
+		die();
+	}
 
 	/**
 	 * Order search results by pre-calculated relevance.
@@ -284,8 +333,8 @@ class FS_Simple_Search {
 	 * @since 2.0
 	 */
 	public static function order_by_relevance_value( &$query ) {
-		
-		if ( true == $query->is_search && '~' != $query->query_vars['s'] ) { // can't use is_search() as it returns true for sub (non-search) queries
+
+		if ( ! self::$supress_relevance_based_search && true == $query->is_search && '~' != $query->query_vars['s'] ) { // can't use is_search() as it returns true for sub (non-search) queries
 			$search_query_meta_key = self::get_search_query_key( get_search_query( false ), self::$relevance_prefix );
 			$query->set( 'meta_key', $search_query_meta_key );
 			$query->set( 'orderby', 'meta_value_num' );
